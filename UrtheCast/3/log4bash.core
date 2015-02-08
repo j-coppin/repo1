@@ -1,0 +1,484 @@
+#!/bin/bash
+###################################################################################################
+# Log library
+#
+# @Author: Leonid Menshenin
+# @Created 02/2011
+#
+###################################################################################################
+#Declarations
+TRUE=1
+FALSE=0
+
+TRACE=0
+DEBUG=1
+INFO=2
+WARNING=3
+ERROR=4
+FATAL=5
+
+l4b_LOGGER=log4bash_logger
+l4b_ROOT_LOGGER=log4bash_rootLogger
+l4b_LOGGER_PREFIX=log4bash_logger
+l4b_APPENDER_PREFIX=log4bash_appender
+
+readonly TRUE
+readonly FALSE
+readonly TRACE
+readonly DEBUG
+readonly INFO
+readonly WARNING
+readonly ERROR
+readonly FATAL
+readonly l4b_LOGGER
+readonly l4b_ROOT_LOGGER
+readonly l4b_LOGGER_PREFIX
+readonly l4b_APPENDER_PREFIX
+
+export TRUE
+export FALSE
+export TRACE
+export DEBUG
+export INFO
+export WARNING
+export ERROR
+export FATAL
+export l4b_LOGGER
+export l4b_ROOT_LOGGER
+export l4b_LOGGER_PREFIX
+export l4b_APPENDER_PREFIX
+
+txtblk='\e[0;30m' # Black - Regular
+txtred='\e[0;31m' # Red
+txtgrn='\e[0;32m' # Green
+txtylw='\e[0;33m' # Yellow
+txtblu='\e[0;34m' # Blue
+txtpur='\e[0;35m' # Purple
+txtcyn='\e[0;36m' # Cyan
+txtwht='\e[0;37m' # White
+#bldblk='\e[1;30m' # Black - Bold
+bldred='\e[1;31m' # Red
+#bldgrn='\e[1;32m' # Green
+#bldylw='\e[1;33m' # Yellow
+#bldblu='\e[1;34m' # Blue
+#bldpur='\e[1;35m' # Purple
+#bldcyn='\e[1;36m' # Cyan
+#bldwht='\e[1;37m' # White
+#unkblk='\e[4;30m' # Black - Underline
+#undred='\e[4;31m' # Red
+#undgrn='\e[4;32m' # Green
+#undylw='\e[4;33m' # Yellow
+#undblu='\e[4;34m' # Blue
+#undpur='\e[4;35m' # Purple
+#undcyn='\e[4;36m' # Cyan
+#undwht='\e[4;37m' # White
+#bakblk='\e[40m'   # Black - Background
+#bakred='\e[41m'   # Red
+#badgrn='\e[42m'   # Green
+#bakylw='\e[43m'   # Yellow
+#bakblu='\e[44m'   # Blue
+#bakpur='\e[45m'   # Purple
+#bakcyn='\e[46m'   # Cyan
+#bakwht='\e[47m'   # White
+txtrst='\e[0m'    # Text Reset
+
+readonly txtblk
+readonly txtred
+readonly txtgrn
+readonly txtylw
+readonly txtblu
+readonly txtpur
+readonly txtcyn
+readonly txtwht
+readonly txtrst
+
+export txtblk
+export txtred
+export txtgrn
+export txtylw
+export txtblu
+export txtpur
+export txtcyn
+export txtwht
+export txtrst
+
+#Default logging configuring
+
+log4bash_FATAL_STYLE=${bldred}
+log4bash_ERROR_STYLE=${txtred}
+log4bash_WARNING_STYLE=${txtylw}
+log4bash_INFO_STYLE=${txtcyn}
+log4bash_DEBUG_STYLE=${txtwhite}
+log4bash_TRACE_STYLE=${txtwhite}
+log4bash_DEFAULT_STYLE=${txtwhite}
+
+log4bash_LOG_ENABLED=$TRUE
+#log4bash_LOG_ENABLED=$FALSE
+log4bash_LOG_DIR=.
+log4bash_LOG_FILENAME=$log4bash_LOG_DIR/$log4bash_LOG_FILE
+log4bash_DATE_FORMAT="%Y-%m-%d %H:%M:%S"
+log4bash_currentTime(){
+	builtin echo $(date +"$log4bash_DATE_FORMAT")
+}
+log4bash_LAYOUT_DEFAULT=format
+log4bash_appender_file_format="%Y%m%d"
+log4bash_ECHO_DEFULT_LEVEL=$DEBUG
+log4bash_LEVEL_0="TRACE"
+log4bash_LEVEL_1="DEBUG"
+log4bash_LEVEL_2="INFO"
+log4bash_LEVEL_3="WARNING"
+log4bash_LEVEL_4="ERROR"
+log4bash_LEVEL_5="FATAL"
+log4bash_LEVEL=$DEBUG
+
+
+
+log4bash_say(){
+if [ $log4bash_LOG_ENABLED -eq $TRUE ];then
+    builtin echo "[log4bash] $@"
+fi
+}
+
+rootDir=$(dirname $(readlink -f ${0}))
+export rootDir
+
+log4bash_abs(){
+	if [ "${1:0:1}" == "." ]; then
+		builtin echo ${rootDir}/${1}
+	else 
+		builtin echo ${1}	
+	fi
+}
+
+. ${rootDir}/log4bash.conf
+
+#export log4bash_rootLogger
+#export log4bash_ERROR_STYLE
+#export log4bash_WARNING_STYLE
+#export log4bash_INFO_STYLE
+#export log4bash_DEBUG_STYLE
+#export log4bash_DEFAULT_STYLE
+#export log4bash_LOG_ENABLED
+#export log4bash_DATE_FORMAT
+#export log4bash_appender_file_format
+#export log4bash_ECHO_DEFULT_LEVEL
+#export log4bash_LEVEL_PREFIXES
+#export log4bash_LEVEL
+#export log4bash_LAYOUT_DEFAULT
+#export log4bash_currentTime
+
+vars=$(compgen -A variable | grep "log4bash_")
+
+for var in $vars ;do
+ export $var
+done
+
+#Check log dir and create it if it does not exist.
+log4bash_check_logdir(){
+if [ "$log4bash_LOG_ENABLED" -eq $TRUE ]; then
+  local dir=$(log4bash_abs $log4bash_LOG_DIR) 
+  if [ -d ${dir} ]; then
+    #log a seperation line
+   log4bash_emptyLog 
+  else
+    mkdir $dir
+  fi
+fi
+}
+
+log4bash_check_app_dir(){
+
+if [ "$log4bash_LOG_ENABLED" -eq $TRUE ]; then
+  dir=$(log4bash_abs $1)
+  if [ ! -d ${dir} ]; then
+    #log a seperation line
+    mkdir $dir
+  fi
+fi
+}
+
+#Appender
+log4bash_filename(){
+#return result
+	if [ ${3} -eq 1 ];then
+		local formatProp={4}_roll_format
+		local format=${!formatProp}
+		if [ -z ${format} ]; then
+			local format="%Y%m%d"
+		fi
+		local suffix=.`date "+${log4bash_appender_file_format}"`
+	else
+		local suffix=""
+	fi
+	log4bash_check_app_dir "${1}"
+	builtin echo ${1}/${2}${suffix}
+}
+#
+log4bash_def_appender_console(){
+  case "$1" in
+  	"$FATAL")
+		local coloredText="${log4bash_FATAL_STYLE}${2}${txtrst}"
+	;;
+	"$ERROR")
+		local coloredText="${log4bash_ERROR_STYLE}${2}${txtrst}"
+	;;
+	"$WARNING")
+		local coloredText="${log4bash_WARNING_STYLE}${2}${txtrst}"
+	;;
+	"$INFO")
+		local coloredText="${log4bash_INFO_STYLE}${2}${txtrst}"
+	;;
+	"$DEBUG")
+		local coloredText="${log4bash_DEBUG_STYLE}${2}${txtrst}"
+	;;
+	"$TRACE")
+		local coloredText="${log4bash_TRACE_STYLE}${2}${txtrst}"
+	;;	
+	*)
+		local coloredText="${log4bash_DEFAULT_STYLE}${2}${txtrst}"
+	;;
+  esac
+  builtin echo -e "$coloredText"
+}
+
+log4bash_def_appender_file(){
+	local logFileDirProp=$3_dir
+	local logFileProp=$3_file
+	local logFileRollProp=$3_roll
+	local logFileDir=${!logFileDirProp}
+	local logFile=${!logFileProp}
+	local logFileRoll=${!logFileRollProp}
+        if [ -z "${logFileDir}" ];then
+                log4bash_say "Can't find log dir for file appender '${3}'. Disabling logging"
+                log4bash_LOG_ENABLED=$FALSE
+                return 1
+        fi
+
+        if [ -z "${logFile}" ];then
+                log4bash_say "Can't find log file definition for file appender '${3}'. Disabling logging"
+                log4bash_LOG_ENABLED=$FALSE
+                return 1
+        fi
+
+        if [ -z "${logFileRoll}" ];then
+		logFileRoll=$FALSE
+        fi
+	builtin echo "$2" >>"$(log4bash_abs $(log4bash_filename "${logFileDir}" "${logFile}" "${logFileRoll}" "${3}" ))" #echo -e
+}
+
+log4bash_formatMessage(){
+	local appenderDef=${1}
+	local text=${2}
+	local layoutProp=${1}_layout
+	local layout=${!layoutProp}
+	if [ -z $layout ];then
+		layout=$log4bash_LAYOUT_DEFAULT
+	fi
+	
+	levelProp=log4bash_LEVEL_$msgLevel
+	level=${!levelProp}
+	local msg=${text}
+	#ibuiltin echo "$($layout)"
+	builtin echo $(log4bash_format_${layout} "${text}")
+}
+
+log4bash_format_default(){
+	builtin echo "$(log4bash_currentTime) /$shellLvl/ [${sourceFiles}: ${lineNumbers}] $level ${stack[0]} $@"
+}
+
+#Empty Log
+log4bash_emptyLog(){
+    i=5  
+}
+
+log4bash_getPropArray(){
+	local propName=${1}
+	IFS=',' read -ra arrayProp <<< "${!propName}"
+	#return result
+	builtin echo "${arrayProp[@]}"
+}
+
+log4bash_getAppenderClass(){
+	local appender={$1}
+	local appenderPropName=${l4b_APPENDER_PREFIX}_${1}
+	#return result
+	builtin echo $appenderPropName
+}
+
+log4bash_getAppenders(){
+	local logger=${1}
+	#return result
+        builtin echo $(log4bash_getPropArray $logger)
+}
+
+log4bash_invokeAppender(){
+	local appender=$1
+	local appenderClassDef="$(log4bash_getAppenderClass $appender)"
+
+	local appenderClass=${!appenderClassDef}
+	if [ -z $appenderClass ];then
+		log4bash_say "can't find appender definition '${appenderClassDef}'. Disabling logging"
+		log4bash_LOG_ENABLED=$FALSE
+		return 1
+	fi
+        
+	local msgLvl=$2
+	local text=${@:3}
+	#fromattedText=$(formatMessage $text)
+	local formattedMessage=$(log4bash_formatMessage "$appenderClassDef" "$text")
+#formatMessage "$appenderClassDef" "$text"
+	log4bash_def_appender_${appenderClass} $msgLvl "$formattedMessage" "$appenderClassDef"
+}
+
+log4bash_invokeAppenders(){
+	local curLogger=${1}
+        local loggerProp=($(log4bash_getPropArray ${curLogger}))
+        local level=${loggerProp[0]}
+	local msgLvl=${2}
+	local appenders=(${loggerProp[@]:1})
+	if [ $msgLvl -ge $level ]; then
+		for appender in "${appenders[@]}" ; do
+			log4bash_invokeAppender "$appender" "${2}" "${@:3}"
+		done
+	fi
+}
+
+log4bash_findAndInvokeLoggers(){
+	# TODO: logger search logic
+	local LOGGERS
+	local ROOT_LOGGER=${l4b_ROOT_LOGGER}
+	local ROOT_LOGGER_PROP=${!ROOT_LOGGER}
+	if [ ! -z $ROOT_LOGGER_PROP ];then
+		LOGGERS[0]=$ROOT_LOGGER
+	else
+		log4bash_say "Can't find rootLogger(property '${l4b_ROOT_LOGGER}'). Please configure log4bash properly."
+		log4bash_LOG_ENABLED=$FALSE
+                return 1		
+	fi	
+	local SCRIPT_LOGGER=${l4b_LOGGER}_$curScriptPrefix
+	local SCRIPT_LOGGER_PROP=${!SCRIPT_LOGGER}
+	if [ ! -z $SCRIPT_LOGGER_PROP ];then
+		LOGGERS[1]=$SCRIPT_LOGGER
+#		logs=$(compgen -A variable | grep "${LOGGER_PROP}")
+	fi
+
+	local METHOD_LOGGER=${SCRIPT_LOGGER}_${stack}
+	METHOD_LOGGER_PROP=${!METHOD_LOGGER}
+	if [ ! -z $METHOD_LOGGER_PROP ];then
+		LOGGERS[2]=$METHOD_LOGGER
+	fi
+	for LOGGER in ${LOGGERS[@]} ;do
+		log4bash_invokeAppenders "$LOGGER" "${1}"  "${@:2}"
+	done
+}
+
+#Log
+log(){
+#if [[ "${FUNCNAME[@]}" == *${testAr[@]}* ]];then
+#	builtin echo !!!!!!!!!!!!!!!!!URA
+#fi
+if [ ! -z ${FUNCNAME} ]; then
+	stack=(${FUNCNAME[@]:2})
+	export stack
+fi
+
+#builtin echo $stack
+if [ ! -z ${BASH_LINENO} ]; then
+        lineNumbers=(${BASH_LINENO[@]:1})
+	export lineNumbers
+fi
+if [ ! -z ${BASH_SOURCE[2]} ]; then
+	sourceFiles=(${BASH_SOURCE[@]:2})
+fi
+#builtin echo $lineNumbers
+curScript=${sourceFiles[0]}
+shellLvl=$((SHLVL-2))
+curScriptFile=${curScript##*/}
+curScriptPrefix=${curScriptFile%%.*}
+
+#builtin echo "shell level:" "$shellLvl"
+
+#builtin echo "PPID:" $PPID
+
+#builtin echo "PID:" $$
+
+#builtin echo "DIRSTACK:" $DIRSTACK
+
+#builtin echo ---------------------
+
+prefix=${_##*/}
+export prefix
+export stack
+export lineNumbers
+export shellLvl
+export sourceFiles
+export curScript
+export curScriptFile
+export curScriptPrefix
+#builtin echo $prefix
+if [ $log4bash_LOG_ENABLED -eq $TRUE ]; then
+  local msgLevel=$1
+  if [ -z $1 ] || [ $1 -gt $FATAL ]; then
+	msgLevel=$DEBUG
+  fi
+  log4bash_findAndInvokeLoggers $msgLevel "${@:2}"
+fi
+}
+
+echo(){
+ log "$log4bash_ECHO_DEFULT_LEVEL" $@
+}
+
+log.fatal(){
+ log "$FATAL" $@
+}
+
+log.error(){
+ log "$ERROR" $@
+}
+
+log.debug(){
+ log "$DEBUG" $@
+}
+
+log.warning(){
+ log "$WARNING" $@
+}
+
+log.info(){
+ log "$INFO" $@
+}
+
+log.trace(){
+ log "$TRACE" $@
+}
+
+# First check logdir
+log4bash_check_logdir
+
+funcs=$(compgen -A function | grep "log4bash_")
+
+for func in $funcs ;do
+ readonly -f $func
+ export -f $func
+done
+
+
+readonly -f log
+readonly -f echo
+readonly -f log.fatal
+readonly -f log.error
+readonly -f log.debug
+readonly -f log.warning
+readonly -f log.info
+readonly -f log.trace
+
+export -f log
+export -f echo
+export -f log.fatal
+export -f log.error
+export -f log.debug
+export -f log.warning
+export -f log.info
+export -f log.trace
+
