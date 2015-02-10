@@ -18,7 +18,7 @@ function check_proc ()
 proc_count=`pidof $program | wc -w`
 if [ $proc_count -gt 100 ]; then
     log.fatal "[CRITICAL] Web Server under heavy load, restart required" 
-    service_restart >> /var/log/check_apache.log
+    service_restart
 elif [ $proc_count -gt 20 ]; then
     log.warn "[HIGH] Web Server Working hard!" 
 elif  [ $proc_count -lt 20 ]; then
@@ -32,6 +32,6 @@ fi
 while :
 do
     check_proc
-    sleep 1 
+    sleep 30
 done
 
